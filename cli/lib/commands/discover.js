@@ -485,7 +485,7 @@ export async function discover() {
 
       console.log(`  ${name}  ${badge}`);
       if (desc) console.log(`  ${desc}`);
-      console.log(`  ${dim('$')} ${cyan(`claude mcp add ${server.name} -- ${server.mcpUrl}`)}`);
+      console.log(`  ${dim('$')} ${cyan(server.install)}`);
       console.log();
     }
   }

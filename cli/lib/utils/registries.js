@@ -447,7 +447,7 @@ const MCP_SERVERS_POPULAR = [
   // Databases
   { name: 'postgres', author: 'modelcontextprotocol', description: 'Read-only access to PostgreSQL databases with schema inspection and query execution', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres', mcpUrl: 'npx -y @modelcontextprotocol/server-postgres', tags: ['database', 'postgres', 'sql'] },
   { name: 'sqlite', author: 'modelcontextprotocol', description: 'Query and manage SQLite databases with business intelligence capabilities', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite', mcpUrl: 'npx -y @modelcontextprotocol/server-sqlite', tags: ['database', 'sqlite', 'sql'] },
-  { name: 'neon', author: 'neondatabase', description: 'Serverless Postgres with branching, schema migrations, and database management', url: 'https://github.com/neondatabase/mcp-server-neon', mcpUrl: 'https://mcp.neon.tech/sse', tags: ['database', 'postgres', 'neon', 'serverless'] },
+  { name: 'neon', author: 'neondatabase', description: 'Serverless Postgres with branching, schema migrations, and database management', url: 'https://github.com/neondatabase/mcp-server-neon', mcpUrl: 'https://mcp.neon.tech/sse', transport: 'http', tags: ['database', 'postgres', 'neon', 'serverless'] },
   { name: 'supabase', author: 'supabase', description: 'Manage Supabase projects, databases, edge functions, and auth', url: 'https://github.com/supabase-community/supabase-mcp', mcpUrl: 'npx -y supabase-mcp-server', tags: ['database', 'supabase', 'auth', 'storage'] },
   { name: 'redis', author: 'redis', description: 'Redis database operations, caching, and pub/sub messaging', url: 'https://github.com/redis/mcp-redis', mcpUrl: 'npx -y @redis/mcp-server', tags: ['database', 'redis', 'cache'] },
   { name: 'mongodb', author: 'mongodb', description: 'MongoDB Atlas database operations, queries, and aggregation pipelines', url: 'https://github.com/mongodb-js/mongodb-mcp-server', mcpUrl: 'npx -y mongodb-mcp-server', tags: ['database', 'mongodb', 'nosql'] },
@@ -482,7 +482,7 @@ const MCP_SERVERS_POPULAR = [
   // AI & search
   { name: 'brave-search', author: 'modelcontextprotocol', description: 'Web and local search using Brave Search API', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search', mcpUrl: 'npx -y @modelcontextprotocol/server-brave-search', tags: ['search', 'web', 'brave'] },
   { name: 'exa', author: 'exa-labs', description: 'Neural search engine for finding relevant web content', url: 'https://github.com/exa-labs/exa-mcp-server', mcpUrl: 'npx -y exa-mcp-server', tags: ['search', 'ai', 'exa'] },
-  { name: 'context7', author: 'upstash', description: 'Up-to-date documentation lookup for any library or framework', url: 'https://github.com/upstash/context7', mcpUrl: 'https://mcp.context7.com/mcp', tags: ['docs', 'documentation', 'search', 'context'] },
+  { name: 'context7', author: 'upstash', description: 'Up-to-date documentation lookup for any library or framework', url: 'https://github.com/upstash/context7', mcpUrl: 'https://mcp.context7.com/mcp', transport: 'http', tags: ['docs', 'documentation', 'search', 'context'] },
 
   // Files & storage
   { name: 'filesystem', author: 'modelcontextprotocol', description: 'Secure file operations with configurable access controls', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem', mcpUrl: 'npx -y @modelcontextprotocol/server-filesystem', tags: ['files', 'filesystem', 'storage'] },
@@ -510,6 +510,12 @@ export function searchMcpServers(query, { limit = 10 } = {}) {
 
     const totalScore = relevance + tagBonus;
     if (totalScore > 0) {
+      // HTTP/SSE servers need --transport http; stdio servers (npx) don't
+      const transport = server.transport || (server.mcpUrl.startsWith('http') ? 'http' : null);
+      const installCmd = transport
+        ? `claude mcp add --transport ${transport} ${server.name} ${server.mcpUrl}`
+        : `claude mcp add ${server.name} -- ${server.mcpUrl}`;
+
       results.push({
         name: server.name,
         author: server.author,
@@ -517,8 +523,9 @@ export function searchMcpServers(query, { limit = 10 } = {}) {
         type: 'mcp',
         description: server.description,
         url: server.url,
-        install: `claude mcp add ${server.name} -- ${server.mcpUrl}`,
+        install: installCmd,
         mcpUrl: server.mcpUrl,
+        transport,
         stars: null,
         _score: totalScore,
       });

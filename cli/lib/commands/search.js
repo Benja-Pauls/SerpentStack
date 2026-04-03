@@ -138,7 +138,7 @@ export async function search(query) {
       if (r.description) {
         console.log(`      ${dim(r.description.slice(0, 90))}`);
       }
-      console.log(`      ${dim('Claude Code:')} ${cyan(`claude mcp add ${r.name} -- ${r.mcpUrl}`)}`);
+      console.log(`      ${dim('Claude Code:')} ${cyan(r.install)}`);
       if (r.url) {
         console.log(`      ${dim('Docs:')}        ${dim(r.url)}`);
       }

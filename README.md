@@ -99,7 +99,7 @@ serpentstack search "docker deploy"
 
    2. neon  mcp
       Serverless Postgres with branching, schema migrations, and database management
-      Claude Code: claude mcp add neon -- https://mcp.neon.tech/sse
+      Claude Code: claude mcp add --transport http neon https://mcp.neon.tech/sse
       Docs:        github.com/neondatabase/mcp-server-neon
 ```
 
@@ -158,7 +158,7 @@ serpentstack discover
   $ claude mcp add stripe -- npx -y @stripe/mcp
 
   neon  mcp
-  $ claude mcp add neon -- https://mcp.neon.tech/sse
+  $ claude mcp add --transport http neon https://mcp.neon.tech/sse
   ...
 
   12 skill recommendations, 3 MCP servers based on your stack.
