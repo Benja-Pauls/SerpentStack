@@ -34,7 +34,14 @@
       "Bash(npx eslint:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(make types:*)",
-      "Bash(npx openapi-typescript:*)"
+      "Bash(npx openapi-typescript:*)",
+      "Bash(node --test cli/test/cli.test.js)",
+      "Bash(node cli/bin/serpentstack.js search \"postgres database\")",
+      "Bash(node cli/bin/serpentstack.js discover)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(node:*)"
     ]
   }
 }
