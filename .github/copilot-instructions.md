@@ -1,84 +1,69 @@
 # SerpentStack — GitHub Copilot Instructions
 
-You are working on SerpentStack, a fullstack template: FastAPI + React + PostgreSQL + Terraform.
+You are working on SerpentStack, a CLI that searches for AI agent skills and MCP servers across every major registry. It also includes a production fullstack template (FastAPI + React + PostgreSQL + Terraform) and persistent background agents.
 
-## Architecture
+## CLI Architecture
 
-- **Backend**: FastAPI, Python 3.12+, async SQLAlchemy 2.0 (asyncpg), Alembic, pydantic-settings, structlog, SlowAPI, Sentry SDK, ARQ
-- **Frontend**: React 18, Vite, TypeScript (strict), Tailwind CSS v4, React Router, React Query, shadcn/ui
-- **Cache/Queue**: Redis 7 (rate limiting, background tasks)
-- **Database**: PostgreSQL 16 (Docker locally, RDS in production)
-- **Testing**: pytest + testcontainers (real Postgres), httpx AsyncClient, Vitest
+The CLI (`cli/`) is the primary product. It has **zero npm dependencies** — Node.js built-ins only.
+
+```
+cli/
+  bin/serpentstack.js       # Entry point, argument parsing, command routing
+  lib/
+    commands/
+      search.js             # Cross-registry skill + MCP server search
+      add.js                # Install skills from any source
+      discover.js           # Project-aware recommendations (detects stack, queries registries)
+      skills-init.js        # Download base skills
+      skills-update.js      # Update base skills
+      persistent.js         # Persistent agent setup + management
+      notifications.js      # View agent findings
+      stack-new.js          # Scaffold new project from template
+      stack-update.js       # Update template files
+    utils/
+      registries.js         # Registry adapters (Anthropic, skills.sh, awesome, GitHub, MCP)
+      ui.js                 # Terminal formatting, colors, spinners, branded output
+      config.js             # Project detection and config management
+      models.js             # Ollama model detection and management
+      agent-utils.js        # OpenClaw workspace management
+      github.js             # GitHub API helpers
+      fs-helpers.js         # File system utilities
+```
 
 ## Key Conventions
 
-### Python / Backend
+### CLI
+- Zero dependencies — use only Node.js built-ins (fetch, fs, path, readline, etc.)
+- All registry adapters return `{ name, source, type, description, url, install, stars?, author?, _score }[]`
+- `type` is either `'skill'` or `'mcp'`
+- Scoring: 0-100 relevance score with source-weighted multipliers
+- Results are deduplicated by normalized name within each type (skills and MCP are separate)
+- MCP server entries include `mcpUrl` for the install command and `tags` for scoring
+- UI uses the snake brand (green theme, `printHeader()`, `divider()`, `spinner()`)
+
+### Template (backend)
 - All route handlers and service methods MUST be `async def`
 - Use `AsyncSession` from `sqlalchemy.ext.asyncio` — never sync Session
 - Services return `None` or domain values — NEVER raise `HTTPException` in services
 - Services flush() but do NOT commit() — routes own the transaction boundary
-- Routes translate service results to HTTP responses (None → 404, etc.) and call `await db.commit()` after mutations
-- New models MUST be imported in `backend/app/models/__init__.py` for Alembic to detect them
-- Use `get_logger(__name__)` with structured event-style logging: `logger.info("event_name", key=value)`
-- UUID primary keys on all models — never integer IDs
-- Pydantic schemas in `schemas/` — never expose ORM models directly
-- API routes prefixed with `/api/v1/`
-- Protect routes with `Depends(get_current_user)` from `routes/auth.py` — returns `UserInfo`
-- Database engine is lazily initialized (not at import time)
-- Line length: 100 characters
-- Formatter/linter: ruff
+- Routes translate service results to HTTP responses (None -> 404, etc.) and call `await db.commit()` after mutations
+- UUID primary keys on all models
+- Structured logging: `get_logger(__name__)`, `logger.info("event_name", key=value)`
 
-### TypeScript / Frontend
-- Strict mode — no `any` without justifying comment
-- Named exports for hooks and utilities (components may use default exports)
-- Types auto-generated from OpenAPI spec via `make types` — prefer generated types over hand-written
-- Use React Query for data fetching, React Router for routing
+### Template (frontend)
+- Strict TypeScript — no `any` without justifying comment
+- Types auto-generated from OpenAPI spec via `make types`
+- React Query for data fetching, React Router for routing
 
-### Database
-- Async driver: `postgresql+asyncpg://`
-- All models inherit from `Base` (UUID pk, created_at, updated_at)
-- Migrations via Alembic (async engine)
+## Testing
 
-### Testing
-- Backend tests use testcontainers with real PostgreSQL — Docker must be running
-- `asyncio_mode = "auto"` is set — do NOT add `@pytest.mark.asyncio` to tests
-- Use `AsyncClient` (httpx) for endpoint tests
-- Frontend tests use Vitest
-
-## Adding a New Endpoint
-
-1. Create SQLAlchemy model in `backend/app/models/` and import it in `models/__init__.py`
-2. Create Pydantic schemas in `backend/app/schemas/`
-3. Create async service in `backend/app/services/` (flush only, no commit, return None for not-found, no HTTPException)
-4. Create async route in `backend/app/routes/` (translate service results to HTTP, commit after mutations)
-5. Register router in `backend/app/main.py`
-6. Add tests in `backend/tests/`
-7. Run `make types` to update frontend TypeScript types
+```bash
+node --test cli/test/cli.test.js    # CLI tests (Node built-in test runner)
+make verify                          # Full suite: lint + typecheck + test (backend + frontend + CLI)
+```
 
 ## Agent Skills
 
-This project includes project-specific Agent Skills in `.skills/`. Key skills:
-- `scaffold` — full end-to-end resource generation following project conventions
-- `auth` — UserInfo contract, get_current_user, provider swapping
-- `test` — testcontainers, savepoint isolation, asyncio_mode = "auto"
-- `generate-skills` — interviews developers to produce skills for any codebase
-- `model-routing` — delegate code generation to on-device models (Ollama) for cost savings
+Skills are structured markdown files (`.skills/*/SKILL.md`) following the [Agent Skills open standard](https://agentskills.io/home). They work with Claude Code, Cursor, Copilot, Gemini CLI, and any tool that reads SKILL.md files.
 
-Persistent agent configs live in `.openclaw/` (SOUL.md, HEARTBEAT.md, AGENTS.md).
-
-## Common Commands
-
-```bash
-make dev        # Start Postgres + Redis + backend + frontend
-make verify     # Lint + typecheck + test (backend & frontend) — run before pushing
-make test       # Run all tests (requires Docker)
-make lint       # ruff + ESLint
-make types      # Auto-generate frontend types from OpenAPI spec
-make migrate    # Run database migrations
-make seed       # Seed database with sample data
-make worker     # Start ARQ background task worker
-make ui component=X  # Add a shadcn/ui component
-make persistent # Start OpenClaw background agent
-```
-
-**Always run `make verify` before pushing.** It runs the same checks as CI.
+Persistent agent configs live in `.openclaw/` (SOUL.md, config.json, agents/).

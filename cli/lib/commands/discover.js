@@ -5,7 +5,7 @@ import {
   bold, dim, green, cyan, magenta, yellow,
   printHeader, spinner, divider,
 } from '../utils/ui.js';
-import { searchAll } from '../utils/registries.js';
+import { searchAll, searchMcpServers } from '../utils/registries.js';
 
 // ─── Stack detection ────────────────────────────────────────
 
@@ -404,10 +404,23 @@ export async function discover() {
     }
   }
 
+  // Step 3b: Find MCP servers for detected services and tools
+  const mcpQueries = [...stack.services, ...stack.tools, ...stack.frameworks];
+  const mcpResults = new Map();
+
+  for (const q of mcpQueries) {
+    const servers = searchMcpServers(q, { limit: 3 });
+    for (const server of servers) {
+      if (!mcpResults.has(server.name)) {
+        mcpResults.set(server.name, server);
+      }
+    }
+  }
+
   spin2.stop();
 
-  if (allResults.size === 0) {
-    success('No new skill recommendations — you\'re well covered!');
+  if (allResults.size === 0 && mcpResults.size === 0) {
+    success('No new recommendations — you\'re well covered!');
     console.log();
     console.log(`  ${dim('Installed skills:')} ${installed.size}`);
     console.log(`  ${dim('Search manually:')}`);
@@ -416,7 +429,7 @@ export async function discover() {
     return;
   }
 
-  // Step 4: Group by category and display
+  // Step 4: Group skills by category and display
   const grouped = new Map();
   for (const [normName, skill] of allResults) {
     const category = resultCategories.get(normName) || 'Other';
@@ -430,28 +443,49 @@ export async function discover() {
   let totalRecommendations = 0;
   const displayCategories = categoryOrder.filter(c => grouped.has(c));
 
-  for (const category of displayCategories) {
-    const skills = grouped.get(category);
-    skills.sort((a, b) => (b._score || 0) - (a._score || 0));
+  if (displayCategories.length > 0) {
+    for (const category of displayCategories) {
+      const skills = grouped.get(category);
+      skills.sort((a, b) => (b._score || 0) - (a._score || 0));
 
-    // Cap per category
-    const capped = skills.slice(0, 8);
-    totalRecommendations += capped.length;
+      // Cap per category
+      const capped = skills.slice(0, 8);
+      totalRecommendations += capped.length;
 
-    divider(category);
+      divider(category);
+      console.log();
+
+      for (const skill of capped) {
+        const badge = sourceBadge(skill.source);
+        const stars = skill.stars ? dim(` ${(skill.stars / 1000).toFixed(1)}k★`) : '';
+        const name = bold(skill.name);
+        const desc = skill.description
+          ? dim(skill.description.length > 70 ? skill.description.slice(0, 67) + '...' : skill.description)
+          : '';
+
+        console.log(`  ${name}  ${badge}${stars}`);
+        if (desc) console.log(`  ${desc}`);
+        console.log(`  ${dim(skill.install)}`);
+        console.log();
+      }
+    }
+  }
+
+  // Step 5: Show MCP server recommendations
+  if (mcpResults.size > 0) {
+    divider(`MCP Servers ${dim(`(${mcpResults.size})`)}`);
     console.log();
 
-    for (const skill of capped) {
-      const badge = sourceBadge(skill.source);
-      const stars = skill.stars ? dim(` ${(skill.stars / 1000).toFixed(1)}k★`) : '';
-      const name = bold(skill.name);
-      const desc = skill.description
-        ? dim(skill.description.length > 70 ? skill.description.slice(0, 67) + '...' : skill.description)
+    for (const [, server] of mcpResults) {
+      const name = bold(server.name);
+      const badge = yellow('mcp');
+      const desc = server.description
+        ? dim(server.description.length > 70 ? server.description.slice(0, 67) + '...' : server.description)
         : '';
 
-      console.log(`  ${name}  ${badge}${stars}`);
+      console.log(`  ${name}  ${badge}`);
       if (desc) console.log(`  ${desc}`);
-      console.log(`  ${dim(skill.install)}`);
+      console.log(`  ${dim('$')} ${cyan(`claude mcp add ${server.name} -- ${server.mcpUrl}`)}`);
       console.log();
     }
   }
@@ -459,10 +493,10 @@ export async function discover() {
   // Footer
   console.log(dim(`  ─────────────────────────────────────────────────────`));
   console.log();
-  console.log(`  ${bold(String(totalRecommendations))} recommendations based on your stack.`);
+  console.log(`  ${bold(String(totalRecommendations))} skill recommendations, ${bold(String(mcpResults.size))} MCP servers based on your stack.`);
   console.log(`  ${dim(`${installed.size} skills already installed.`)}`);
   console.log();
-  console.log(`  ${dim('Install one:')}  ${bold('serpentstack add <name>')}`);
-  console.log(`  ${dim('Search more:')} ${bold('serpentstack search "<query>"')}`);
+  console.log(`  ${dim('Install a skill:')} ${bold('serpentstack add <name>')}`);
+  console.log(`  ${dim('Search more:')}     ${bold('serpentstack search "<query>"')}`);
   console.log();
 }

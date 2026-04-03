@@ -139,12 +139,6 @@ describe('Command modules load', () => {
     assert.ok(exitCode === 0 || exitCode === 1);
   });
 
-  it('mcp shows coming-soon message', async () => {
-    const { stderr, stdout, exitCode } = await run('mcp');
-    const output = stdout + stderr;
-    assert.ok(output.includes('coming soon'));
-  });
-
   it('persistent runs without crashing', async () => {
     const { exitCode } = await run('persistent');
     assert.ok(exitCode === 0 || exitCode === 1);

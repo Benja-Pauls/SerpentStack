@@ -13,6 +13,7 @@ const SOURCE_BADGE = {
   'skills.sh':            cyan('skills.sh'),
   'awesome-agent-skills': green('awesome'),
   'github':               dim('github'),
+  'mcp-registry':         yellow('mcp'),
 };
 
 function sourceBadge(source) {
@@ -62,11 +63,12 @@ export async function search(query) {
     return;
   }
 
-  const { results, sources } = data;
+  const { results, mcp = [], sources } = data;
   const sourceList = sources.names.join(', ');
   const sourceCount = sources.names.length;
+  const totalResults = results.length + mcp.length;
 
-  if (results.length === 0) {
+  if (totalResults === 0) {
     spin.stop();
     console.log();
     divider(`No results for "${query}"`);
@@ -92,35 +94,65 @@ export async function search(query) {
 
   // Header
   console.log();
-  divider(`${results.length} results for "${query}"`);
+  divider(`${totalResults} results for "${query}"`);
   info(`Searched ${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}: ${dim(sourceList)}`);
   if (sources.failed > 0) {
     warn(`${sources.failed} ${sources.failed === 1 ? 'source' : 'sources'} unreachable`);
   }
-  console.log();
 
-  // Results
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    const num = dim(`${String(i + 1).padStart(2)}.`);
-    const badge = sourceBadge(r.source);
-    const stars = starsLabel(r.stars);
-    const name = bold(r.name);
-    const desc = r.description ? dim(` — ${r.description.slice(0, 80)}`) : '';
+  // ─── Skill results ──────────────────────────────────────
+  if (results.length > 0) {
+    console.log();
+    divider(`Skills ${dim(`(${results.length})`)}`);
+    console.log();
 
-    console.log(`  ${num} ${name}  ${badge}${stars}`);
-    if (r.description) {
-      console.log(`      ${dim(r.description.slice(0, 90))}`);
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const num = dim(`${String(i + 1).padStart(2)}.`);
+      const badge = sourceBadge(r.source);
+      const stars = starsLabel(r.stars);
+      const name = bold(r.name);
+
+      console.log(`  ${num} ${name}  ${badge}${stars}`);
+      if (r.description) {
+        console.log(`      ${dim(r.description.slice(0, 90))}`);
+      }
+      console.log(`      ${dim('$')} ${cyan(r.install)}`);
+      if (i < results.length - 1) console.log();
     }
-    console.log(`      ${dim('$')} ${cyan(r.install)}`);
-    if (i < results.length - 1) console.log();
+  }
+
+  // ─── MCP server results ─────────────────────────────────
+  if (mcp.length > 0) {
+    console.log();
+    divider(`MCP Servers ${dim(`(${mcp.length})`)}`);
+    console.log();
+
+    for (let i = 0; i < mcp.length; i++) {
+      const r = mcp[i];
+      const num = dim(`${String(i + 1).padStart(2)}.`);
+      const name = bold(r.name);
+      const badge = yellow('mcp');
+
+      console.log(`  ${num} ${name}  ${badge}`);
+      if (r.description) {
+        console.log(`      ${dim(r.description.slice(0, 90))}`);
+      }
+      console.log(`      ${dim('Claude Code:')} ${cyan(`claude mcp add ${r.name} -- ${r.mcpUrl}`)}`);
+      if (r.url) {
+        console.log(`      ${dim('Docs:')}        ${dim(r.url)}`);
+      }
+      if (i < mcp.length - 1) console.log();
+    }
   }
 
   // Footer
   console.log();
-  console.log(`  ${dim('Install a skill:')} ${bold('serpentstack add <owner/repo>')}`);
-  console.log(`  ${dim('Refine search:')}   ${bold(`serpentstack search "${query} <more terms>"`)}`);
+  if (results.length > 0) {
+    console.log(`  ${dim('Install a skill:')}  ${bold('serpentstack add <owner/repo>')}`);
+  }
+  console.log(`  ${dim('Refine search:')}    ${bold(`serpentstack search "${query} <more terms>"`)}`);
   console.log();
-  console.log(`  ${dim('Sources:')} ${magenta('anthropic')} ${dim('official')}  ${cyan('skills.sh')} ${dim('Vercel')}  ${green('awesome')} ${dim('curated')}  ${dim('github community')}`);
+  console.log(`  ${dim('Sources:')} ${magenta('anthropic')} ${dim('official')}  ${cyan('skills.sh')} ${dim('Vercel')}  ${green('awesome')} ${dim('curated')}  ${dim('github community')}  ${yellow('mcp')} ${dim('servers')}`);
   console.log();
 }

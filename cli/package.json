@@ -1,7 +1,7 @@
 {
   "name": "serpentstack",
-  "version": "0.3.9",
-  "description": "Find the best agent skills. Run persistent agents locally. Ship faster.",
+  "version": "1.0.0",
+  "description": "Find any AI agent skill or MCP server. Search every registry, install in seconds.",
   "type": "module",
   "bin": {
     "serpentstack": "bin/serpentstack.js"
@@ -17,12 +17,18 @@
     "ai",
     "agent",
     "skills",
-    "development",
-    "fullstack",
-    "fastapi",
-    "react",
-    "openclaw",
-    "persistent-agent"
+    "agent-skills",
+    "mcp",
+    "mcp-server",
+    "skill-search",
+    "skill-registry",
+    "claude-code",
+    "cursor",
+    "copilot",
+    "codex",
+    "gemini-cli",
+    "developer-tools",
+    "cli"
   ],
   "license": "MIT",
   "repository": {

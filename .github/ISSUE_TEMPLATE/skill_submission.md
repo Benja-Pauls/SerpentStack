@@ -1,31 +1,40 @@
 ---
-name: New skill submission
-about: Contribute a new skill to the template
-title: '[skill] '
-labels: skill
+name: New skill or MCP server submission
+about: Add a skill or MCP server to the registry
+title: '[registry] '
+labels: registry
 assignees: ''
 ---
 
-## Skill name
+## What are you submitting?
 
-`your-skill-name`
+- [ ] Agent skill (for the base skills set)
+- [ ] MCP server (for the curated MCP registry)
+- [ ] Registry adapter (new skill or MCP source)
 
-## What does this skill do?
+## Name
 
-One paragraph describing the task this skill automates and when a developer would use it.
+`your-name-here`
 
-## Files changed / added
+## Description
 
-- `.skills/your-skill/SKILL.md`
-- (any supporting markdown files)
+One paragraph describing what this skill teaches agents or what the MCP server provides.
+
+## Source
+
+- **GitHub URL:** (e.g. https://github.com/org/repo)
+- **Install command:** (for MCP: `npx -y @scope/server-name`, for skills: `serpentstack add org/repo`)
+
+## For MCP servers: tags
+
+List relevant tags for search matching (e.g. `database`, `postgres`, `auth`, `payments`):
 
 ## Checklist
 
-- [ ] SKILL.md is 30-80 lines (core instructions only — not documentation)
-- [ ] Commands in the skill have been tested against the SerpentStack project
-- [ ] File paths reference actual SerpentStack paths (e.g. `backend/app/routes/`, not generic paths)
-- [ ] Skill doesn't require tools outside the standard SerpentStack dev environment
+- [ ] The source URL is valid and public
+- [ ] The skill has a valid `SKILL.md` file (for skill submissions)
+- [ ] The MCP server is actively maintained (for MCP submissions)
 
-## Notes for reviewers
+## Notes
 
-Anything specific you'd like feedback on.
+Anything else relevant — why this is useful, how popular it is, etc.

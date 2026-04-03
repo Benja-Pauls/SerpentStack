@@ -27,7 +27,7 @@ function parseArgs(args) {
 }
 
 // Known commands for fuzzy matching on typos
-const KNOWN_COMMANDS = ['stack', 'skills', 'persistent', 'search', 'add', 'discover', 'mcp', 'notifications', 'notifs'];
+const KNOWN_COMMANDS = ['stack', 'skills', 'persistent', 'search', 'add', 'discover', 'notifications', 'notifs'];
 
 function suggestCommand(input) {
   const lower = input.toLowerCase();
@@ -57,15 +57,15 @@ function editDistance(a, b) {
 
 function showHelp() {
   printHeader();
-  console.log(`  ${dim(green('╰─'))} ${dim('Find the best agent skills. Run persistent agents locally. Ship faster.')}`);
+  console.log(`  ${dim(green('╰─'))} ${dim('Find any AI agent skill or MCP server. Search every registry, install in seconds.')}`);
   console.log();
 
-  divider('Skill discovery');
+  divider('Search & install');
   console.log();
   printSnakeList([
-    `${cyan('search')} ${dim('<query>')}               Search all skill registries`,
-    `${cyan('discover')}                      Analyze your project, recommend skills`,
-    `${cyan('add')} ${dim('<source>')}                  Install a skill from any registry or repo`,
+    `${cyan('search')} ${dim('<query>')}               Search skills + MCP servers across all registries`,
+    `${cyan('add')} ${dim('<source>')}                  Install a skill from any registry, repo, or URL`,
+    `${cyan('discover')}                      Analyze your project, recommend skills + MCP servers`,
   ]);
   console.log();
 
@@ -88,12 +88,10 @@ function showHelp() {
     `${cyan('persistent')} ${dim('--configure')}       Edit project settings`,
     `${cyan('persistent')} ${dim('--watch')}           Live agent activity feed`,
     `${cyan('notifications')}                 What your agents have found`,
-    `${cyan('notifications')} ${dim('--errors')}      Errors only`,
-    `${cyan('notifications')} ${dim('--clear')}       Clear all notifications`,
   ]);
   console.log();
 
-  divider('New projects');
+  divider('Template');
   console.log();
   printSnakeList([
     `${cyan('stack new')} ${dim('<name>')}             Scaffold a full project from the template`,
@@ -113,8 +111,8 @@ function showHelp() {
 
   console.log(`  ${dim('Examples:')}`);
   console.log(`    ${dim('$')} serpentstack search "react testing"`);
-  console.log(`    ${dim('$')} serpentstack skills`);
-  console.log(`    ${dim('$')} serpentstack persistent --start`);
+  console.log(`    ${dim('$')} serpentstack add clerk`);
+  console.log(`    ${dim('$')} serpentstack discover`);
   console.log();
   console.log(`  ${dim('Docs:')} ${cyan('https://github.com/Benja-Pauls/SerpentStack')}`);
   console.log();
@@ -178,9 +176,6 @@ async function main() {
   } else if (noun === 'discover') {
     const { discover } = await import('../lib/commands/discover.js');
     await discover();
-  } else if (noun === 'mcp') {
-    error('serpentstack mcp is coming soon.');
-    console.log(`\n  Track progress: ${bold('https://github.com/Benja-Pauls/SerpentStack/issues')}\n`);
   } else if (noun === 'notifications' || noun === 'notifs') {
     const { notifications } = await import('../lib/commands/notifications.js');
     // --read 3 parses as read:true + verb:'3', --read=3 parses as read:'3'

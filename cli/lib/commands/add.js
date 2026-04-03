@@ -306,6 +306,188 @@ function deriveSkillName(url, content, fallback) {
 }
 
 /**
+ * Look up a tool on GitHub and generate a context-rich skill stub.
+ * Returns { name, content } or null.
+ */
+async function generateSkillStub(input) {
+  const inputLower = input.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Strategy 1: Direct repo lookup (e.g., "stripe" → github.com/stripe/stripe-node)
+  // Try common patterns and pick the highest-starred match
+  let repo = null;
+  const directNames = [input, `${input}-node`, `${input}-js`, `${input}-python`, `${input}-sdk`];
+  const directResults = await Promise.all(
+    directNames.map(repoName =>
+      fetchJSON(`https://api.github.com/repos/${input}/${repoName}`).catch(() => null)
+    )
+  );
+  const validDirect = directResults.filter(r => r?.full_name && r?.stargazers_count != null);
+  if (validDirect.length > 0) {
+    repo = validDirect.sort((a, b) => b.stargazers_count - a.stargazers_count)[0];
+  }
+
+  // Strategy 2: Search with name qualifier for tighter matching
+  if (!repo) {
+    const data = await fetchJSON(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(input)}+in:name&sort=stars&per_page=10`
+    );
+
+    if (data?.items?.length) {
+      // Strict matching: name or owner must match the input
+      repo = data.items.find(r => r.name.toLowerCase().replace(/[^a-z0-9]/g, '') === inputLower);
+      if (!repo) repo = data.items.find(r => r.owner.login.toLowerCase().replace(/[^a-z0-9]/g, '') === inputLower);
+      if (!repo) repo = data.items.find(r => r.name.toLowerCase().includes(inputLower));
+      if (!repo) repo = data.items[0];
+    }
+  }
+
+  if (!repo) return null;
+
+  const name = input.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+  const description = repo.description || `${repo.name} integration`;
+  const homepage = repo.homepage || '';
+  const ghUrl = repo.html_url;
+  const language = repo.language || '';
+  const topics = repo.topics?.length ? repo.topics.join(', ') : '';
+  const stars = repo.stargazers_count || 0;
+
+  // Try to detect the package manager and install command
+  let installCmd = '';
+  let packageSection = '';
+
+  // Check for package.json (npm)
+  const pkgJson = await tryFetchRaw(
+    `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/package.json`
+  );
+  if (pkgJson) {
+    try {
+      const pkg = JSON.parse(pkgJson);
+      let pkgName = pkg.name || repo.name;
+      // Monorepo roots often have "/root" or "private: true" — use repo name instead
+      if (pkg.private || pkgName.includes('/root') || pkgName.includes('/monorepo')) {
+        pkgName = repo.name;
+      }
+      installCmd = `npm install ${pkgName}`;
+      packageSection = `- **npm**: \`${pkgName}\`\n- **Install**: \`${installCmd}\``;
+    } catch { /* not valid JSON */ }
+  }
+
+  // Check for pyproject.toml (Python)
+  if (!installCmd) {
+    const pyproject = await tryFetchRaw(
+      `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/pyproject.toml`
+    );
+    if (pyproject) {
+      const nameMatch = pyproject.match(/^name\s*=\s*"([^"]+)"/m);
+      const pkgName = nameMatch?.[1] || repo.name;
+      installCmd = `pip install ${pkgName}`;
+      packageSection = `- **PyPI**: \`${pkgName}\`\n- **Install**: \`${installCmd}\``;
+    }
+  }
+
+  // Check for setup.py as fallback
+  if (!installCmd) {
+    const setupPy = await tryFetchRaw(
+      `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/setup.py`
+    );
+    if (setupPy) {
+      installCmd = `pip install ${repo.name}`;
+      packageSection = `- **PyPI**: \`${repo.name}\`\n- **Install**: \`${installCmd}\``;
+    }
+  }
+
+  if (!packageSection) {
+    packageSection = `- **Install**: See [${repo.name} docs](${homepage || ghUrl})`;
+  }
+
+  // Determine docs URL
+  let docsUrl = '';
+  if (homepage && homepage !== ghUrl) {
+    docsUrl = homepage;
+  } else {
+    // Common docs URL patterns
+    const docsPatterns = [
+      `https://docs.${name}.com`,
+      `https://${name}.dev`,
+      `https://${name}.io`,
+    ];
+    // We won't fetch-check these to keep it fast; just use homepage or GitHub
+    docsUrl = homepage || ghUrl;
+  }
+
+  // Fetch first part of README for context
+  let readmeSnippet = '';
+  for (const fname of ['README.md', 'readme.md', 'Readme.md']) {
+    const readme = await tryFetchRaw(
+      `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/${fname}`
+    );
+    if (readme) {
+      // Extract first meaningful section (skip badges, title, HTML)
+      const lines = readme.split('\n');
+      const meaningful = [];
+      let started = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Always skip badge/image lines and HTML tags
+        if (trimmed.startsWith('[![') || trimmed.startsWith('![') || trimmed.startsWith('<') || trimmed.startsWith('> [!')) continue;
+        // Skip empty lines at start
+        if (!started && trimmed === '') continue;
+        // Skip headings before we've started collecting
+        if (!started && trimmed.startsWith('#')) { started = true; continue; }
+        if (started) {
+          // Stop at the next heading
+          if (trimmed.startsWith('## ') && meaningful.length > 2) break;
+          if (meaningful.length >= 12) break;
+          meaningful.push(line);
+        }
+      }
+      if (meaningful.length > 0) {
+        readmeSnippet = meaningful.join('\n').trim();
+      }
+      break;
+    }
+  }
+
+  // Build the skill stub
+  const content = `---
+name: ${name}
+generated: true
+source: ${ghUrl}
+---
+
+# ${repo.name}
+
+> ${description}
+
+## Context
+
+${packageSection}
+- **GitHub**: [${repo.full_name}](${ghUrl})${stars > 100 ? ` (⭐ ${stars >= 1000 ? `${(stars / 1000).toFixed(1)}k` : stars})` : ''}
+- **Docs**: [${docsUrl}](${docsUrl})${language ? `\n- **Language**: ${language}` : ''}${topics ? `\n- **Topics**: ${topics}` : ''}
+
+## Overview
+
+${readmeSnippet || `${repo.name} — ${description}. See the docs link above for full documentation.`}
+
+## Agent Instructions
+
+When working with ${repo.name}:
+
+1. **Read the official docs** at [${docsUrl}](${docsUrl}) for the latest API reference and guides
+2. **Install the package** with \`${installCmd || `see docs`}\`
+3. **Follow the project's conventions** — check their README and examples directory for patterns
+4. **Check for breaking changes** if upgrading — review the CHANGELOG or releases on GitHub
+
+## Notes
+
+This skill was auto-generated because no community-maintained skill exists yet for ${repo.name}.
+To improve it, edit \`.skills/${name}/SKILL.md\` with project-specific patterns and conventions.
+`;
+
+  return { name, content, repoUrl: ghUrl, docsUrl, stars, description };
+}
+
+/**
  * Install a skill from a GitHub source into .skills/<name>/SKILL.md
  */
 export async function add(source, { force = false } = {}) {
@@ -374,34 +556,60 @@ export async function add(source, { force = false } = {}) {
 
   // ─── Handle result ────────────────────────────────────────
 
+  // ─── Step 4: Generate a skill stub from GitHub context ───
   if (!result) {
-    spin.stop();
-    error(`Could not find SKILL.md for ${bold(clean)}.`);
-    console.log();
+    spin.update(`No existing skill found. Generating context for ${bold(clean)}...`);
 
-    // Check if this skill exists on skills.sh (GitHub-unfetchable)
-    const npxCmd = await findSkillsShFallback(clean);
-    if (npxCmd) {
-      console.log(`  ${dim('This skill is hosted on')} ${cyan('skills.sh')} ${dim('and not available as a GitHub repo.')}`);
-      console.log(`  ${dim('Install it with the skills.sh CLI instead:')}`);
+    const stub = await generateSkillStub(clean);
+
+    if (stub) {
+      const stubDir = join(process.cwd(), '.skills', stub.name);
+      const stubPath = join(stubDir, 'SKILL.md');
+
+      if (existsSync(stubPath) && !force) {
+        spin.stop();
+        warn(`${bold(`.skills/${stub.name}/SKILL.md`)} already exists.`);
+        info(`Use ${bold('--force')} to overwrite.`);
+        console.log();
+        return;
+      }
+
+      mkdirSync(stubDir, { recursive: true });
+      writeFileSync(stubPath, stub.content, 'utf8');
+
+      spin.stop();
+      success(`Generated ${bold(stub.name)} → ${green(`.skills/${stub.name}/SKILL.md`)}`);
+      console.log(`    ${dim(`Source: ${stub.repoUrl}`)}`);
+      if (stub.docsUrl && stub.docsUrl !== stub.repoUrl) {
+        console.log(`    ${dim(`Docs:   ${stub.docsUrl}`)}`);
+      }
+      if (stub.stars > 100) {
+        const starStr = stub.stars >= 1000 ? `${(stub.stars / 1000).toFixed(1)}k` : `${stub.stars}`;
+        console.log(`    ${dim(`⭐ ${starStr} stars`)}`);
+      }
       console.log();
-      console.log(`    ${dim('$')} ${bold(npxCmd)}`);
+
+      const lines = stub.content.split('\n').length;
+      const bytes = Buffer.byteLength(stub.content, 'utf8');
+      const size = bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B`;
+      info(`${lines} lines, ${size} ${dim('(generated)')}`);
+      console.log();
+
+      console.log(`  ${dim('Your agent can now use this skill. Try:')}`);
+      console.log(`    ${dim('>')} ${bold(`Read .skills/${stub.name}/SKILL.md and integrate ${stub.name}`)}`);
+      console.log();
+      console.log(`  ${dim('Tip: Edit the generated skill to add project-specific patterns.')}`);
       console.log();
       return;
     }
 
-    console.log(`  ${dim('This could mean:')}`);
-    console.log(`    ${dim('•')} The repo doesn't contain a SKILL.md file`);
-    console.log(`    ${dim('•')} The skill name doesn't match any known registry entry`);
-    console.log(`    ${dim('•')} The repo uses a non-standard directory structure`);
+    // Total failure — couldn't even find a GitHub repo
+    spin.stop();
+    error(`Could not find ${bold(clean)} on any registry or GitHub.`);
     console.log();
-    console.log(`  ${dim('Try searching first:')}`);
+    console.log(`  ${dim('Try:')}`);
     console.log(`    ${dim('$')} ${cyan(`serpentstack search "${clean}"`)}`);
-    if (parts.length >= 2) {
-      console.log();
-      console.log(`  ${dim('Or browse the repo:')}`);
-      console.log(`    ${cyan(`https://github.com/${parts.slice(0, 2).join('/')}`)}`);
-    }
+    console.log(`    ${dim('$')} ${cyan(`serpentstack add <owner>/<repo>`)}`);
     console.log();
     return;
   }

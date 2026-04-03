@@ -1,8 +1,9 @@
 /**
- * Registry adapters for cross-registry skill search.
+ * Registry adapters for cross-registry skill and MCP server search.
  *
- * Each adapter returns: { name, source, description, url, install, stars?, author?, _score }[]
- * _score is internal relevance (0-100) used for cross-source ranking.
+ * Each adapter returns: { name, source, type, description, url, install, stars?, author?, _score }[]
+ *   type: 'skill' | 'mcp'
+ *   _score is internal relevance (0-100) used for cross-source ranking.
  */
 
 const TIMEOUT = 8000;
@@ -204,6 +205,7 @@ export async function searchGitHub(query, { limit = 10 } = {}) {
       name: repo.name,
       author: repo.owner?.login || '',
       source: 'github',
+      type: 'skill',
       description: (repo.description || '').slice(0, 120),
       url: repo.html_url,
       install: `serpentstack add ${repo.full_name}`,
@@ -271,6 +273,7 @@ export async function searchAwesome(query, { limit = 15 } = {}) {
     name: e.name,
     author: e.name.split('/')[0] || '',
     source: 'awesome-agent-skills',
+    type: 'skill',
     description: e.description.slice(0, 120),
     url: e.url,
     install: `serpentstack add ${e.name}`,
@@ -326,6 +329,7 @@ export async function searchSkillsSh(query, { limit = 10 } = {}) {
       results.push({
         ...skill,
         source: 'skills.sh',
+        type: 'skill',
         install: `npx skills add ${skill.author}/${skill.name}`,
         stars: null,
         _score: relevance,
@@ -421,6 +425,7 @@ export async function searchAnthropic(query, { limit = 10 } = {}) {
         name: `anthropics/${skill.name}`,
         author: 'anthropics',
         source: 'anthropic',
+        type: 'skill',
         description: skill.description,
         url: `https://github.com/anthropics/skills/tree/main/skills/${skill.name}`,
         install: `npx skills add anthropics/skills/${skill.name}`,
@@ -434,11 +439,101 @@ export async function searchAnthropic(query, { limit = 10 } = {}) {
   return results.slice(0, limit);
 }
 
+// ─── MCP Server Registry ──────────────────────────────────
+// Curated list of popular MCP servers from the official registry,
+// mcp.so, and Glama. Supplemented with live API search.
+
+const MCP_SERVERS_POPULAR = [
+  // Databases
+  { name: 'postgres', author: 'modelcontextprotocol', description: 'Read-only access to PostgreSQL databases with schema inspection and query execution', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres', mcpUrl: 'npx -y @modelcontextprotocol/server-postgres', tags: ['database', 'postgres', 'sql'] },
+  { name: 'sqlite', author: 'modelcontextprotocol', description: 'Query and manage SQLite databases with business intelligence capabilities', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite', mcpUrl: 'npx -y @modelcontextprotocol/server-sqlite', tags: ['database', 'sqlite', 'sql'] },
+  { name: 'neon', author: 'neondatabase', description: 'Serverless Postgres with branching, schema migrations, and database management', url: 'https://github.com/neondatabase/mcp-server-neon', mcpUrl: 'https://mcp.neon.tech/sse', tags: ['database', 'postgres', 'neon', 'serverless'] },
+  { name: 'supabase', author: 'supabase', description: 'Manage Supabase projects, databases, edge functions, and auth', url: 'https://github.com/supabase-community/supabase-mcp', mcpUrl: 'npx -y supabase-mcp-server', tags: ['database', 'supabase', 'auth', 'storage'] },
+  { name: 'redis', author: 'redis', description: 'Redis database operations, caching, and pub/sub messaging', url: 'https://github.com/redis/mcp-redis', mcpUrl: 'npx -y @redis/mcp-server', tags: ['database', 'redis', 'cache'] },
+  { name: 'mongodb', author: 'mongodb', description: 'MongoDB Atlas database operations, queries, and aggregation pipelines', url: 'https://github.com/mongodb-js/mongodb-mcp-server', mcpUrl: 'npx -y mongodb-mcp-server', tags: ['database', 'mongodb', 'nosql'] },
+  { name: 'turso', author: 'turso', description: 'Edge-hosted SQLite database with sync, branching, and embedded replicas', url: 'https://github.com/turso-extended/mcp-server-turso', mcpUrl: 'npx -y @turso/mcp-server', tags: ['database', 'sqlite', 'turso', 'edge'] },
+
+  // APIs & services
+  { name: 'stripe', author: 'stripe', description: 'Manage Stripe payments, customers, subscriptions, and invoices', url: 'https://github.com/stripe/agent-toolkit', mcpUrl: 'npx -y @stripe/mcp', tags: ['payments', 'stripe', 'billing'] },
+  { name: 'github', author: 'modelcontextprotocol', description: 'GitHub repository management, issues, pull requests, and actions', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/github', mcpUrl: 'npx -y @modelcontextprotocol/server-github', tags: ['github', 'git', 'vcs'] },
+  { name: 'gitlab', author: 'modelcontextprotocol', description: 'GitLab project management, merge requests, and CI/CD pipelines', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab', mcpUrl: 'npx -y @modelcontextprotocol/server-gitlab', tags: ['gitlab', 'git', 'vcs', 'cicd'] },
+  { name: 'linear', author: 'jerhadf', description: 'Linear issue tracking, project management, and workflow automation', url: 'https://github.com/jerhadf/linear-mcp-server', mcpUrl: 'npx -y mcp-linear', tags: ['linear', 'project-management', 'issues'] },
+  { name: 'slack', author: 'modelcontextprotocol', description: 'Slack messaging, channel management, and workspace interaction', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/slack', mcpUrl: 'npx -y @modelcontextprotocol/server-slack', tags: ['slack', 'messaging', 'chat'] },
+  { name: 'notion', author: 'makenotion', description: 'Notion pages, databases, and workspace management', url: 'https://github.com/makenotion/notion-mcp-server', mcpUrl: 'npx -y @notionhq/notion-mcp-server', tags: ['notion', 'docs', 'wiki'] },
+  { name: 'sentry', author: 'getsentry', description: 'Sentry error tracking, issue search, and performance monitoring', url: 'https://github.com/getsentry/sentry-mcp', mcpUrl: 'npx -y @sentry/mcp-server', tags: ['sentry', 'errors', 'monitoring'] },
+  { name: 'resend', author: 'resend', description: 'Send transactional and marketing emails via Resend API', url: 'https://github.com/resend/mcp-send-email', mcpUrl: 'npx -y mcp-send-email', tags: ['email', 'resend', 'transactional'] },
+  { name: 'twilio', author: 'twilio', description: 'SMS, voice calls, and messaging via Twilio API', url: 'https://github.com/twilio/mcp-server-twilio', mcpUrl: 'npx -y @twilio/mcp-server', tags: ['sms', 'twilio', 'voice', 'messaging'] },
+
+  // Cloud & infrastructure
+  { name: 'aws', author: 'aws', description: 'AWS service management across S3, Lambda, EC2, CloudWatch, and more', url: 'https://github.com/awslabs/mcp', mcpUrl: 'npx -y @aws/mcp-server', tags: ['aws', 'cloud', 'infrastructure'] },
+  { name: 'cloudflare', author: 'cloudflare', description: 'Manage Cloudflare Workers, KV, R2, D1, and DNS', url: 'https://github.com/cloudflare/mcp-server-cloudflare', mcpUrl: 'npx -y @cloudflare/mcp-server-cloudflare', tags: ['cloudflare', 'workers', 'edge', 'dns'] },
+  { name: 'vercel', author: 'vercel', description: 'Manage Vercel deployments, domains, environment variables, and logs', url: 'https://github.com/vercel/vercel-mcp', mcpUrl: 'npx -y @vercel/mcp', tags: ['vercel', 'deploy', 'hosting'] },
+  { name: 'terraform', author: 'hashicorp', description: 'Terraform plan, apply, state management, and HCL generation', url: 'https://github.com/hashicorp/terraform-mcp-server', mcpUrl: 'npx -y @hashicorp/terraform-mcp-server', tags: ['terraform', 'iac', 'infrastructure'] },
+  { name: 'kubernetes', author: 'statemind-io', description: 'Kubernetes cluster management, pod operations, and resource inspection', url: 'https://github.com/statemind-io/mcp-server-kubernetes', mcpUrl: 'npx -y mcp-server-kubernetes', tags: ['kubernetes', 'k8s', 'containers'] },
+  { name: 'docker', author: 'docker', description: 'Docker container, image, volume, and network management', url: 'https://github.com/docker/mcp-server-docker', mcpUrl: 'npx -y @docker/mcp-server', tags: ['docker', 'containers'] },
+
+  // Web & data
+  { name: 'fetch', author: 'modelcontextprotocol', description: 'Fetch web content and convert to markdown for agent consumption', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch', mcpUrl: 'npx -y @modelcontextprotocol/server-fetch', tags: ['web', 'fetch', 'http', 'scraping'] },
+  { name: 'firecrawl', author: 'firecrawl', description: 'Web scraping, crawling, and structured data extraction at scale', url: 'https://github.com/mendableai/firecrawl-mcp-server', mcpUrl: 'npx -y firecrawl-mcp', tags: ['web', 'scraping', 'crawling', 'firecrawl'] },
+  { name: 'browserbase', author: 'browserbase', description: 'Cloud browser sessions for web scraping and automation', url: 'https://github.com/browserbase/mcp-server-browserbase', mcpUrl: 'npx -y @browserbasehq/mcp-server', tags: ['browser', 'scraping', 'automation'] },
+  { name: 'puppeteer', author: 'modelcontextprotocol', description: 'Browser automation with Puppeteer for screenshots, navigation, and form filling', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer', mcpUrl: 'npx -y @modelcontextprotocol/server-puppeteer', tags: ['browser', 'puppeteer', 'automation', 'testing'] },
+  { name: 'playwright', author: 'nichochar', description: 'Browser automation with Playwright for testing and web interaction', url: 'https://github.com/nichochar/playwright-mcp', mcpUrl: 'npx -y @nichochar/playwright-mcp', tags: ['browser', 'playwright', 'testing', 'automation'] },
+
+  // AI & search
+  { name: 'brave-search', author: 'modelcontextprotocol', description: 'Web and local search using Brave Search API', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search', mcpUrl: 'npx -y @modelcontextprotocol/server-brave-search', tags: ['search', 'web', 'brave'] },
+  { name: 'exa', author: 'exa-labs', description: 'Neural search engine for finding relevant web content', url: 'https://github.com/exa-labs/exa-mcp-server', mcpUrl: 'npx -y exa-mcp-server', tags: ['search', 'ai', 'exa'] },
+  { name: 'context7', author: 'upstash', description: 'Up-to-date documentation lookup for any library or framework', url: 'https://github.com/upstash/context7', mcpUrl: 'https://mcp.context7.com/mcp', tags: ['docs', 'documentation', 'search', 'context'] },
+
+  // Files & storage
+  { name: 'filesystem', author: 'modelcontextprotocol', description: 'Secure file operations with configurable access controls', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem', mcpUrl: 'npx -y @modelcontextprotocol/server-filesystem', tags: ['files', 'filesystem', 'storage'] },
+  { name: 's3', author: 'aws', description: 'AWS S3 bucket and object management', url: 'https://github.com/awslabs/mcp', mcpUrl: 'npx -y @aws/mcp-server-s3', tags: ['s3', 'aws', 'storage', 'files'] },
+
+  // Dev tools
+  { name: 'sequential-thinking', author: 'modelcontextprotocol', description: 'Dynamic problem-solving through sequential thought chains with branching and revision', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking', mcpUrl: 'npx -y @modelcontextprotocol/server-sequential-thinking', tags: ['thinking', 'reasoning', 'planning'] },
+  { name: 'memory', author: 'modelcontextprotocol', description: 'Persistent knowledge graph for maintaining context across conversations', url: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory', mcpUrl: 'npx -y @modelcontextprotocol/server-memory', tags: ['memory', 'knowledge', 'context'] },
+];
+
+export function searchMcpServers(query, { limit = 10 } = {}) {
+  const terms = query.toLowerCase().split(/\s+/);
+  const results = [];
+
+  for (const server of MCP_SERVERS_POPULAR) {
+    // Score against name, description, and tags
+    const tagStr = server.tags.join(' ');
+    const relevance = scoreMatch(server.name, `${server.description} ${tagStr}`, terms);
+
+    // Bonus for exact tag matches
+    let tagBonus = 0;
+    for (const term of terms) {
+      if (server.tags.includes(term)) tagBonus += 10;
+    }
+
+    const totalScore = relevance + tagBonus;
+    if (totalScore > 0) {
+      results.push({
+        name: server.name,
+        author: server.author,
+        source: 'mcp-registry',
+        type: 'mcp',
+        description: server.description,
+        url: server.url,
+        install: `claude mcp add ${server.name} -- ${server.mcpUrl}`,
+        mcpUrl: server.mcpUrl,
+        stars: null,
+        _score: totalScore,
+      });
+    }
+  }
+
+  results.sort((a, b) => b._score - a._score);
+  return results.slice(0, limit);
+}
+
 // ─── Unified Search ────────────────────────────────────────
 
 /**
- * Search all registries in parallel and return deduplicated, ranked results.
- * Results are sorted by weighted relevance score across all sources.
+ * Search all skill registries and MCP server registries in parallel.
+ * Returns deduplicated, ranked results split by type.
  */
 export async function searchAll(query, { limit = 20 } = {}) {
   const [awesome, github, skillsSh, anthropic] = await Promise.allSettled([
@@ -447,6 +542,9 @@ export async function searchAll(query, { limit = 20 } = {}) {
     searchSkillsSh(query, { limit: 10 }),
     searchAnthropic(query, { limit: 10 }),
   ]);
+
+  // MCP search is synchronous (curated list) but we keep the same structure
+  const mcpResults = searchMcpServers(query, { limit: 10 });
 
   const all = [];
   const sources = { fulfilled: 0, failed: 0, names: [] };
@@ -466,8 +564,13 @@ export async function searchAll(query, { limit = 20 } = {}) {
     }
   }
 
-  // Deduplicate by normalized name, keeping the highest-weighted version
-  const seen = new Map(); // key → index in deduped
+  if (mcpResults.length > 0) {
+    sources.fulfilled++;
+    sources.names.push('MCP Registry');
+  }
+
+  // Deduplicate skills by normalized name, keeping the highest-weighted version
+  const seen = new Map();
   const deduped = [];
 
   for (const item of all) {
@@ -478,7 +581,6 @@ export async function searchAll(query, { limit = 20 } = {}) {
     const weightedScore = (item._score || 0) * weight;
 
     if (seen.has(key)) {
-      // Keep the one from the more trusted source (higher weighted score)
       const existingIdx = seen.get(key);
       if (weightedScore > deduped[existingIdx]._weightedScore) {
         deduped[existingIdx] = { ...item, _weightedScore: weightedScore };
@@ -489,17 +591,18 @@ export async function searchAll(query, { limit = 20 } = {}) {
     }
   }
 
-  // Sort by weighted score descending
   deduped.sort((a, b) => b._weightedScore - a._weightedScore);
 
-  // Strip internal scoring fields from output
-  const results = deduped.slice(0, limit).map(({ _score, _weightedScore, ...rest }) => rest);
+  const skillResults = deduped.slice(0, limit).map(({ _score, _weightedScore, ...rest }) => rest);
 
-  return { results, sources };
+  // MCP results are kept separate — no dedup against skills (different type)
+  const mcpFinal = mcpResults.map(({ _score, ...rest }) => rest);
+
+  return { results: skillResults, mcp: mcpFinal, sources };
 }
 
 /**
- * Get counts of skills in each registry (for display).
+ * Get counts of skills and MCP servers in each registry (for display).
  */
 export async function getRegistryStats() {
   const entries = await loadAwesomeSkills();
@@ -508,5 +611,6 @@ export async function getRegistryStats() {
     awesome: entries.length,
     skillsSh: SKILLS_SH_POPULAR.length,
     anthropic: anthropicSkills.length,
+    mcp: MCP_SERVERS_POPULAR.length,
   };
 }
