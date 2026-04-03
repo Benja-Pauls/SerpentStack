@@ -11,6 +11,8 @@
 
 <p align="center"><strong>Find any AI agent skill or MCP server. Search every registry, install in seconds.</strong></p>
 
+<p align="center"><img src="assets/serpentstack_demo.gif" alt="serpentstack search demo" width="720" /></p>
+
 <p align="center">
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#search">Search</a> &middot;
