@@ -1,6 +1,6 @@
 {
   "name": "serpentstack",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Find any AI agent skill or MCP server. Search every registry, install in seconds.",
   "type": "module",
   "bin": {
